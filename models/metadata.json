@@ -1,0 +1,9 @@
+{
+  "best_model": "LightGBM",
+  "best_roc_auc": 0.8455,
+  "best_f1": 0.6234,
+  "n_features": 45,
+  "n_train": 5634,
+  "n_test": 1409,
+  "churn_rate": 0.2653698707936959
+}

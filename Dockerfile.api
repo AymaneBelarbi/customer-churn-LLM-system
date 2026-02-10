@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Run data pipeline + training + SHAP + financial sim on build
+RUN cd /app && python -c "\
+from src.data_cleaning import build_pipeline; build_pipeline(); \
+from src.model_training import run_training_pipeline; run_training_pipeline(tune=False); \
+from src.shap_explainability import generate_shap_analysis; generate_shap_analysis(); \
+from src.financial_simulation import simulate_financial_impact; simulate_financial_impact()"
+
+EXPOSE 8000
+
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
