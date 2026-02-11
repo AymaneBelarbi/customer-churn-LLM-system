@@ -102,7 +102,7 @@ Generates personalized retention emails using customer profile + SHAP drivers. S
 ## 🚀 Quick Start
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/revenue-intelligence-system.git
+git clone https://github.com/AymaneBelarbi/revenue-intelligence-system.git
 cd revenue-intelligence-system
 
 python -m venv venv
