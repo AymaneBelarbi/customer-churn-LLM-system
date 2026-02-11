@@ -182,7 +182,7 @@ Dashboard: http://localhost:8501 | API Docs: http://localhost:8000/docs
 
 ## Author
 
-Built by **Kira** — ML Engineer & Full-Stack Developer
+Built by **Aymane Ait Belarbi** — ML Engineer & Full-Stack Developer
 
 ---
 
