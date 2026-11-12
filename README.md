@@ -1,8 +1,8 @@
 # 📊 Revenue Intelligence System
 
-**An end-to-end ML platform that predicts customer churn, explains why customers leave, and auto-generates personalized retention campaigns — recovering $73K+ in annual revenue.**
+**An end-to-end churn modeling project that combines predictions, explanations, retention-message generation, and a financial impact simulation.**
 
-Built as a production-grade system, not a notebook exercise.
+A portfolio project with an API, dashboard, and container configuration. Financial figures below are scenario estimates, not measured business outcomes.
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![XGBoost](https://img.shields.io/badge/XGBoost-0.846_AUC-green)
@@ -14,7 +14,7 @@ Built as a production-grade system, not a notebook exercise.
 
 ## 🎯 Business Problem
 
-A telecom company with 7,043 customers loses **$1.67M annually** from a 26.5% churn rate. The executive team needs to know:
+In the sample telecom dataset of 7,043 customers, the simulation estimates annualized lost revenue of **$1.67M** at a 26.5% churn rate. The analysis explores:
 
 1. **Who** is about to leave?
 2. **Why** are they leaving?
@@ -25,7 +25,9 @@ This system answers all four questions.
 
 ---
 
-## 💰 Results
+## 💰 Model results and simulated scenario
+
+The financial figures assume a 5% reduction among churned customers, 12 months of retained revenue, a $50 campaign cost per saved customer, and a 10% discount for three months. They are illustrative estimates, not observed revenue or a validated intervention.
 
 | Metric | Value |
 |--------|-------|
@@ -102,8 +104,8 @@ Generates personalized retention emails using customer profile + SHAP drivers. S
 ## 🚀 Quick Start
 
 ```bash
-git clone https://github.com/AymaneBelarbi/revenue-intelligence-system.git
-cd revenue-intelligence-system
+git clone https://github.com/AymaneBelarbi/customer-churn-LLM-system.git
+cd customer-churn-LLM-system
 
 python -m venv venv
 source venv/bin/activate  # Windows: .\venv\Scripts\activate
@@ -169,6 +171,8 @@ Dashboard: http://localhost:8501 | API Docs: http://localhost:8000/docs
 ---
 
 ## 📊 Financial Sensitivity Analysis
+
+These are simulated scenarios using the assumptions above, not observed outcomes.
 
 | Churn Reduction | Customers Saved | Revenue Recovered | Net Impact | ROI |
 |----------------|-----------------|-------------------|------------|-----|
