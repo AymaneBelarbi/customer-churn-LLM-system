@@ -1,12 +1,47 @@
 """
 LLM-Powered Retention Message Generator
 Generates personalized retention messages for high-risk customers.
-Uses Claude API (Anthropic) or falls back to template-based generation.
+Uses a LangChain chain on Claude (Anthropic) with template-based generation as its fallback.
 """
 
-import os
 import json
+import logging
+import os
 from typing import Optional
+
+from langchain_core.language_models import BaseChatModel
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import Runnable, RunnableLambda
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_MODEL = "claude-sonnet-4-20250514"
+MAX_CONCURRENCY = 4
+
+RETENTION_PROMPT = ChatPromptTemplate.from_messages([
+    ("human", """You are a customer retention specialist for a telecom company.
+Generate a personalized, empathetic retention email for this high-risk customer.
+
+Customer Profile:
+- Customer ID: {customer_id}
+- Tenure: {tenure} months
+- Contract: {contract}
+- Monthly Charges: ${monthly_charges}
+- Internet Service: {internet_service}
+- Churn Probability: {churn_probability}
+
+Top Churn Risk Drivers (from SHAP analysis):
+{shap_drivers}
+
+Requirements:
+1. Be warm, personal, and empathetic
+2. Address the specific risk factors identified by SHAP
+3. Include a concrete, quantified offer (discount, upgrade, or bonus)
+4. Create appropriate urgency without being pushy
+5. Keep it under 200 words
+6. Include a clear call-to-action"""),
+])
 
 
 def generate_retention_message_template(customer_profile: dict, churn_probability: float, shap_drivers: list) -> str:
@@ -99,81 +134,114 @@ Telco Revenue Intelligence"""
     return message
 
 
+def _prompt_inputs(request: dict) -> dict:
+    profile = request["profile"]
+    return {
+        "customer_id": profile.get("customer_id", "N/A"),
+        "tenure": profile.get("tenure", 0),
+        "contract": profile.get("contract", "N/A"),
+        "monthly_charges": f"{profile.get('monthly_charges', 0):.2f}",
+        "internet_service": profile.get("internet_service", "N/A"),
+        "churn_probability": f"{request['churn_probability']:.1%}",
+        "shap_drivers": json.dumps(request["shap_drivers"][:5], indent=2),
+    }
+
+
+def _template_message(request: dict) -> str:
+    return generate_retention_message_template(
+        request["profile"], request["churn_probability"], request["shap_drivers"]
+    )
+
+
+def _template_fallback(request: dict) -> str:
+    logger.warning("LLM generation failed (%s), falling back to template.", request.get("error"))
+    return _template_message(request)
+
+
+def build_retention_chain(model: BaseChatModel) -> Runnable:
+    """
+    prompt -> model -> text, falling back to the template message if the model call fails.
+    Input: {"profile": dict, "churn_probability": float, "shap_drivers": list}.
+    """
+    llm_chain = (
+        RunnableLambda(_prompt_inputs) | RETENTION_PROMPT | model | StrOutputParser()
+    ).with_config(run_name="retention_email")
+    fallback = RunnableLambda(_template_fallback).with_config(run_name="retention_template")
+    return llm_chain.with_fallbacks([fallback], exception_key="error")
+
+
+def default_chat_model(api_key: str) -> BaseChatModel:
+    from langchain_anthropic import ChatAnthropic
+
+    return ChatAnthropic(
+        model=os.environ.get("ANTHROPIC_MODEL", DEFAULT_MODEL),
+        api_key=api_key,
+        max_tokens=500,
+        max_retries=2,
+        timeout=60,
+    )
+
+
+def _resolve_chain(api_key: Optional[str], model: Optional[BaseChatModel]) -> Optional[Runnable]:
+    if model is None:
+        api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            return None
+        model = default_chat_model(api_key)
+    return build_retention_chain(model)
+
+
 def generate_retention_message_llm(
     customer_profile: dict,
     churn_probability: float,
     shap_drivers: list,
     api_key: Optional[str] = None,
+    model: Optional[BaseChatModel] = None,
 ) -> str:
     """
-    Use Claude API to generate a personalized retention message.
-    Falls back to template if no API key is available.
+    Generate a personalized retention message with Claude through LangChain.
+    Falls back to the template if no API key is available or the model call fails.
     """
-    api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-
-    if not api_key:
+    chain = _resolve_chain(api_key, model)
+    if chain is None:
         return generate_retention_message_template(customer_profile, churn_probability, shap_drivers)
-
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-
-        prompt = f"""You are a customer retention specialist for a telecom company. 
-Generate a personalized, empathetic retention email for this high-risk customer.
-
-Customer Profile:
-- Customer ID: {customer_profile.get('customer_id', 'N/A')}
-- Tenure: {customer_profile.get('tenure', 0)} months
-- Contract: {customer_profile.get('contract', 'N/A')}
-- Monthly Charges: ${customer_profile.get('monthly_charges', 0):.2f}
-- Internet Service: {customer_profile.get('internet_service', 'N/A')}
-- Churn Probability: {churn_probability:.1%}
-
-Top Churn Risk Drivers (from SHAP analysis):
-{json.dumps(shap_drivers[:5], indent=2)}
-
-Requirements:
-1. Be warm, personal, and empathetic
-2. Address the specific risk factors identified by SHAP
-3. Include a concrete, quantified offer (discount, upgrade, or bonus)
-4. Create appropriate urgency without being pushy
-5. Keep it under 200 words
-6. Include a clear call-to-action"""
-
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=500,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return message.content[0].text
-
-    except Exception as e:
-        print(f"⚠️ LLM API failed ({e}), falling back to template.")
-        return generate_retention_message_template(customer_profile, churn_probability, shap_drivers)
+    return chain.invoke(
+        {"profile": customer_profile, "churn_probability": churn_probability, "shap_drivers": shap_drivers},
+        config={"run_name": "retention_message", "metadata": {"customer_id": customer_profile.get("customer_id")}},
+    )
 
 
 def batch_generate_messages(
     high_risk_customers: list,
     use_llm: bool = False,
     api_key: Optional[str] = None,
+    model: Optional[BaseChatModel] = None,
 ) -> list:
     """Generate retention messages for a batch of high-risk customers."""
-    messages = []
-    for customer in high_risk_customers:
-        if use_llm:
-            msg = generate_retention_message_llm(
-                customer["profile"], customer["churn_prob"], customer["shap_drivers"], api_key
-            )
-        else:
-            msg = generate_retention_message_template(
-                customer["profile"], customer["churn_prob"], customer["shap_drivers"]
-            )
-        messages.append({
-            "customer_id": customer["profile"].get("customer_id"),
-            "churn_probability": customer["churn_prob"],
-            "message": msg,
-        })
-    return messages
+    requests = [
+        {"profile": c["profile"], "churn_probability": c["churn_prob"], "shap_drivers": c["shap_drivers"]}
+        for c in high_risk_customers
+    ]
+    chain = _resolve_chain(api_key, model) if use_llm else None
+    if chain is None:
+        texts = [_template_message(r) for r in requests]
+    else:
+        texts = chain.batch(
+            requests,
+            config=[
+                {"run_name": "retention_message", "max_concurrency": MAX_CONCURRENCY,
+                 "metadata": {"customer_id": r["profile"].get("customer_id")}}
+                for r in requests
+            ],
+        )
+    return [
+        {
+            "customer_id": r["profile"].get("customer_id"),
+            "churn_probability": r["churn_probability"],
+            "message": text,
+        }
+        for r, text in zip(requests, texts)
+    ]
 
 
 if __name__ == "__main__":

@@ -97,7 +97,7 @@ Every prediction comes with feature-level explanations. Top churn drivers:
 5. Lack of tech support and online security
 
 ### LLM-Powered Retention
-Generates personalized retention emails using customer profile + SHAP drivers. Supports Claude API with template fallback.
+Generates personalized retention emails from the customer profile and SHAP drivers. Built as a LangChain chain (prompt template → `ChatAnthropic` → text) with the rule-based template wired in as a `with_fallbacks` branch, so a failed or rate-limited model call still returns a message. Batches run concurrently through `chain.batch`. Set `LANGSMITH_TRACING=true` to trace every generation, including fallbacks and the triggering error, in LangSmith.
 
 ---
 
@@ -109,7 +109,8 @@ cd customer-churn-LLM-system
 
 python -m venv venv
 source venv/bin/activate  # Windows: .\venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
+pytest -q
 
 # Run full pipeline
 python -c "from src.data_cleaning import build_pipeline; build_pipeline()"
@@ -150,7 +151,8 @@ Dashboard: http://localhost:8501 | API Docs: http://localhost:8000/docs
 │   ├── model_training.py          # XGBoost, LightGBM, Neural Net + tuning
 │   ├── shap_explainability.py     # Global + per-customer SHAP
 │   ├── financial_simulation.py    # ROI with sensitivity analysis
-│   └── llm_retention.py           # Claude API + template retention
+│   └── llm_retention.py           # LangChain retention chain + template fallback
+├── tests/                         # Retention chain tests (fake chat models, offline)
 ├── models/                        # Saved models + artifacts
 ├── static/                        # SHAP plots + JSON data
 ├── docker-compose.yml
@@ -165,7 +167,7 @@ Dashboard: http://localhost:8501 | API Docs: http://localhost:8000/docs
 **ML:** XGBoost · LightGBM · scikit-learn · SHAP  
 **Backend:** FastAPI · Pydantic · Uvicorn  
 **Frontend:** Streamlit · Plotly  
-**LLM:** Anthropic Claude API  
+**LLM:** LangChain · Claude (langchain-anthropic) · LangSmith  
 **Infra:** Docker · docker-compose  
 
 ---
